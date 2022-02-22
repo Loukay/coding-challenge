@@ -47,79 +47,84 @@ class Block {
 	 */
 	public function register_block() {
 		register_block_type_from_metadata(
-			$this->plugin->dir(),
-			[
-				'render_callback' => [ $this, 'render_callback' ],
-			]
+				$this->plugin->dir(),
+				[
+						'render_callback' => [ $this, 'render_callback' ],
+				]
 		);
 	}
 
 	/**
 	 * Renders the block.
 	 *
-	 * @param array    $attributes The attributes for the block.
-	 * @param string   $content    The block content, if any.
-	 * @param WP_Block $block      The instance of this block.
+	 * @param array $attributes The attributes for the block.
+	 * @param string $content The block content, if any.
+	 * @param WP_Block $block The instance of this block.
+	 *
 	 * @return string The markup of the block.
 	 */
 	public function render_callback( $attributes, $content, $block ) {
-		$post_types = get_post_types(  [ 'public' => true ] );
-		$class_name = $attributes['className'];
+		$class_name = $attributes['className'] ?? '';
+		$post_types =  get_post_types( [ 'public' => true ], 'objects' );
+		$post_types_slugs = array_keys( $post_types );
+		$counts = array();
+		foreach ( $post_types_slugs as $post_type ) {
+			$counts[ $post_type ] = 0;
+		}
+		$query = new WP_Query( array(
+				'post_type' => array_keys( $post_types ),
+				'posts_per_page' => 100,
+				'no_found_rows' => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+		) );
+		foreach ( $query->posts as $post ) {
+			$post_type = $post->post_type;
+			$counts[ $post_type ]++;
+		}
 		ob_start();
 
 		?>
-        <div class="<?php echo $class_name; ?>">
-			<h2>Post Counts</h2>
+		<div class="<?php echo esc_attr( $class_name ); ?>">
+			<h2><?php _e( 'Post Counts', 'site-counts' ) ?></h2>
 			<ul>
-			<?php
-			foreach ( $post_types as $post_type_slug ) :
-                $post_type_object = get_post_type_object( $post_type_slug  );
-                $post_count = count(
-                    get_posts(
-						[
-							'post_type' => $post_type_slug,
-							'posts_per_page' => -1,
-						]
-					)
-                );
-
+				<?php
+					foreach ( $counts as $post_type_slug => $count ) :
 				?>
-				<li><?php echo 'There are ' . $post_count . ' ' .
-					  $post_type_object->labels->name . '.'; ?></li>
-			<?php endforeach;	?>
-			</ul><p><?php echo 'The current post ID is ' . $_GET['post_id'] . '.'; ?></p>
-
-			<?php
-			$query = new WP_Query(  array(
-				'post_type' => ['post', 'page'],
-				'post_status' => 'any',
-				'date_query' => array(
-					array(
-						'hour'      => 9,
-						'compare'   => '>=',
-					),
-					array(
-						'hour' => 17,
-						'compare'=> '<=',
-					),
-				),
-                'tag'  => 'foo',
-                'category_name'  => 'baz',
-				  'post__not_in' => [ get_the_ID() ],
-			));
-
-			if ( $query->have_posts() ) :
-				?>
-				 <h2>5 posts with the tag of foo and the category of baz</h2>
-                <ul>
-                <?php
-
-                 foreach ( array_slice( $query->posts, 0, 5 ) as $post ) :
-                    ?><li><?php echo $post->post_title ?></li><?php
-				endforeach;
-			endif;
-		 	?>
+					<li>
+						<?php printf( __( 'There are %d %s', 'site-counts' ), $count, $post_types[ $post_type_slug ]->labels->name ); ?>
+					</li>
+				<?php endforeach; ?>
 			</ul>
+			<p>
+				<?php printf( __( 'The current post ID is %d.', 'site-counts' ), absint( $_GET['post_id'] ) ); ?>
+			</p>
+
+			<?php
+			$query = new WP_Query( array(
+				'post_type'     => 'post',
+				'post_status'   => 'any',
+				'posts_per_page' => 6,
+				'tag_id' => 3,
+				'cat' => 4,
+				// Hard coding the tag and category IDs further optimizes the query
+				'no_found_rows' => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			) );
+
+			if ( $query->have_posts() ) : ?>
+				<h2><?php printf( __( "%d posts with the tag of foo and the category of baz", 'site-counts' ), 5 ) ?></h2>
+				<ul>
+					<?php
+						foreach ( $query->posts as $post ) :
+							if ( $post->ID == get_the_ID() ) continue;
+					?>
+
+						<li><?php echo esc_html( $post->post_title ) ?></li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
 		</div>
 		<?php
 
